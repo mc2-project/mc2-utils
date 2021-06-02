@@ -9,7 +9,7 @@ include(FetchContent)
 set(FETCHCONTENT_QUIET OFF)
 FetchContent_Declare(
     spdlog
-    GIT_REPOSITORY git@github.com:opaque-systems/spdlog.git
+    GIT_REPOSITORY https://github.com/opaque-systems/spdlog.git
 )
 FetchContent_MakeAvailable(spdlog)
 
