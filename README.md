@@ -21,7 +21,7 @@ To build `mc2-utils` for an enclave, add the following to your `CMakeLists.txt` 
 include(FetchContent)
 FetchContent_Declare(
   mc2_utils_e
-  GIT_REPOSITORY git@github.com:mc2-systems/mc2-utils.git
+  GIT_REPOSITORY https//github.com/mc2-systems/mc2-utils.git
 )
 set(FETCHCONTENT_QUIET OFF)
 
