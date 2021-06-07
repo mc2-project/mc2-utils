@@ -162,6 +162,11 @@ int Attestation::AttestEvidence(
 ) {
     oe_result_t result = OE_OK;
 
+    // Initialize the verifier. This will do nothing if the verifier is already
+    // initialized but ensures verification still works even if
+    // `GetFormatSettings` hasn't been called.
+    oe_result_t oe_res = oe_verifier_initialize();
+
 #ifndef HOST
     // While attesting, the evidence being attested must not be tampered
     // with. Ensure that it has been copied over to the enclave if in an
