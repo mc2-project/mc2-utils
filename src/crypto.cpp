@@ -9,6 +9,12 @@ Crypto::Crypto(): m_initialized(false)
 {
     int res = -1;
 
+#ifdef HOST
+    spdlog::set_pattern("%Y-%m-%d %H:%M:%S - HOST - %l - %v");
+#else
+    spdlog::set_pattern("%Y-%m-%d %H:%M:%S - ENCLAVE - %l - %v");
+#endif
+
     mbedtls_ctr_drbg_init(&m_ctr_drbg_context);
     mbedtls_entropy_init(&m_entropy_context);
     mbedtls_pk_init(&m_pk_context);
