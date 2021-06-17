@@ -61,12 +61,6 @@ Crypto::Crypto(): m_initialized(false)
         return;
     }
 
-    // Initialize GCM context
-    mbedtls_gcm_init(&m_gcm_context);
-
-    // Initialize SHA256 context
-    mbedtls_sha256_init(&m_hash_ctx);
-
     m_initialized = true;
     spdlog::info("Successfully initialized cryptography module.");
 }
@@ -75,7 +69,6 @@ Crypto::Crypto(): m_initialized(false)
 Crypto::~Crypto()
 {
     // Free mbedtls contexts
-    mbedtls_gcm_free(&m_gcm_context);
     mbedtls_pk_free(&m_pk_context);
     mbedtls_entropy_free(&m_entropy_context);
     mbedtls_ctr_drbg_free(&m_ctr_drbg_context);
@@ -315,8 +308,9 @@ int Crypto::SymEnc(
 ) {
     int res = -1;
 
-    if (!m_initialized)
-        return res;
+    // Initialize GCM context
+    mbedtls_gcm_context ctx;
+    mbedtls_gcm_init(&ctx);
     
     // Set the pointers so that the ciphertext is formatted as:
     //     IV || TAG || ENCRYPTED DATA
@@ -326,11 +320,12 @@ int Crypto::SymEnc(
 
     // Add `sym_key` and AES cipher to the current GCM context
     res = mbedtls_gcm_setkey(
-        &m_gcm_context,
+        &ctx,
         MBEDTLS_CIPHER_ID_AES,
         sym_key,
         CIPHER_KEY_SIZE * 8); // Key size is given in bits
     if( res != 0 ) {
+        mbedtls_gcm_free(&ctx);
         spdlog::error("Failed to set symmetric key during symmetric key encryption.");
         spdlog::error("Returned error: {}", to_string(res));
         return res;
@@ -339,6 +334,7 @@ int Crypto::SymEnc(
     // Sample randomness for the IV
     res = RandGen(iv, CIPHER_IV_SIZE);
     if( res != 0 ) {
+        mbedtls_gcm_free(&ctx);
         spdlog::error("Failed to generate IV during symmetric key encryption.");
         spdlog::error("Returned error: {}", to_string(res));
         return res;
@@ -346,10 +342,10 @@ int Crypto::SymEnc(
 
     // Encrypt data
     res = mbedtls_gcm_crypt_and_tag( 
-        &m_gcm_context,
+        &ctx,
         MBEDTLS_GCM_ENCRYPT,
         data_size,
-        iv, // TODO: Might need to cast here
+        iv,
         CIPHER_IV_SIZE,
         aad,
         aad_size,
@@ -358,9 +354,14 @@ int Crypto::SymEnc(
         CIPHER_TAG_SIZE,
         tag);
     if( res != 0 ) {
+        mbedtls_gcm_free(&ctx);
         spdlog::error("Failed to perform symmetric key encryption.");
         spdlog::error("Returned error: {}", to_string(res));
     }
+    
+    // Free the GCM context
+    mbedtls_gcm_free(&ctx);
+    
     return res;
 }
 
@@ -375,16 +376,18 @@ int Crypto::SymDec(
 ) {
     int res = -1;
 
-    if (!m_initialized)
-        return res;
+    // Initialize GCM context
+    mbedtls_gcm_context ctx;
+    mbedtls_gcm_init(&ctx);
 
     // Add `sym_key` and AES cipher to the current GCM context
     res = mbedtls_gcm_setkey(
-        &m_gcm_context,
+        &ctx,
         MBEDTLS_CIPHER_ID_AES,
         sym_key,
         CIPHER_KEY_SIZE * 8); // Key size is given in bits
     if( res != 0 ) {
+        mbedtls_gcm_free(&ctx);
         spdlog::error("Failed to set symmetric key during symmetric key decryption.");
         spdlog::error("Returned error: {}", to_string(res));
         return res;
@@ -398,7 +401,7 @@ int Crypto::SymDec(
 
     // Decrypt the data
     res = mbedtls_gcm_auth_decrypt(
-        &m_gcm_context,
+        &ctx,
         enc_data_size - CIPHER_IV_SIZE - CIPHER_TAG_SIZE,
         iv,
         CIPHER_IV_SIZE,
@@ -409,9 +412,14 @@ int Crypto::SymDec(
         ciphertext,
         data);
     if (res != 0) {
+        mbedtls_gcm_free(&ctx);
         spdlog::error("Failed to perform symmetric key decryption.");
         spdlog::error("Returned error: {}", to_string(res));
     }
+    
+    // Free the GCM context
+    mbedtls_gcm_free(&ctx);
+
     return res;
 }
 
@@ -423,28 +431,27 @@ int Crypto::Hash(
 ) {
     int res = -1;
 
-    if (!m_initialized)
-        return res;
+    // Initialize SHA256 context
+    mbedtls_sha256_context ctx;
+    mbedtls_sha256_init(&ctx);
 
 // Macro to simplify error handling
-#define safe_sha(call) {                  \
-  res = (call);                           \
-  if (res) {                              \
-    mbedtls_sha256_free(&m_hash_ctx);     \
-    spdlog::error("Failed to hash");      \
-    spdlog::error("Returned error: {}",   \
-        to_string(res));                  \
-    return res;                           \
-  }                                       \
+#define safe_sha(call) {                                 \
+  res = (call);                                          \
+  if (res) {                                             \
+    mbedtls_sha256_free(&ctx);                           \
+    spdlog::error("Failed to hash");                     \
+    spdlog::error("Returned error: {}", to_string(res)); \
+    return res;                                          \
+  }                                                      \
 }
-
     // Compute the hash
-    safe_sha(mbedtls_sha256_starts_ret(&m_hash_ctx, 0));
-    safe_sha(mbedtls_sha256_update_ret(&m_hash_ctx, data, data_size));
-    safe_sha(mbedtls_sha256_finish_ret(&m_hash_ctx, output));
+    safe_sha(mbedtls_sha256_starts_ret(&ctx, 0));
+    safe_sha(mbedtls_sha256_update_ret(&ctx, data, data_size));
+    safe_sha(mbedtls_sha256_finish_ret(&ctx, output));
 
-    // Clear the hash context
-    mbedtls_sha256_free(&m_hash_ctx);
+    // Free the hash context
+    mbedtls_sha256_free(&ctx);
 
     return res;
 }

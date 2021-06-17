@@ -29,8 +29,6 @@ class Crypto
     mbedtls_ctr_drbg_context m_ctr_drbg_context;
     mbedtls_entropy_context  m_entropy_context;
     mbedtls_pk_context       m_pk_context;
-    mbedtls_gcm_context      m_gcm_context;
-    mbedtls_sha256_context   m_hash_ctx;
     bool                     m_initialized;
     size_t                   rsa_modulus_size;
 
