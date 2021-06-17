@@ -352,7 +352,10 @@ int Crypto::SymEnc(
         spdlog::error("Failed to perform symmetric key encryption.");
         spdlog::error("Returned error: {}", to_string(res));
     }
-
+    
+    // Free the GCM context
+    mbedtls_gcm_free(&ctx);
+    
     return res;
 }
 
@@ -407,6 +410,10 @@ int Crypto::SymDec(
         spdlog::error("Failed to perform symmetric key decryption.");
         spdlog::error("Returned error: {}", to_string(res));
     }
+    
+    // Free the GCM context
+    mbedtls_gcm_free(&ctx);
+
     return res;
 }
 
@@ -437,7 +444,7 @@ int Crypto::Hash(
     safe_sha(mbedtls_sha256_update_ret(&ctx, data, data_size));
     safe_sha(mbedtls_sha256_finish_ret(&ctx, output));
 
-    // Clear the hash context
+    // Free the hash context
     mbedtls_sha256_free(&ctx);
 
     return res;
