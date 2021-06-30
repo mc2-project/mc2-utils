@@ -197,7 +197,7 @@ namespace {
         for (int i = 0; i < 100; i++) {
             std::vector<uint8_t> perturbed_ct(ct);
             perturb(perturbed_ct);
-            ASSERT_EQ(0, crypto.SymDec(sym_key, perturbed_ct.data(),
+            ASSERT_NE(0, crypto.SymDec(sym_key, perturbed_ct.data(),
                                        reinterpret_cast<const uint8_t*>("aad"),
                                        pt.data(), perturbed_ct.size(),
                                        strlen("aad")))
