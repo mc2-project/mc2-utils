@@ -1,0 +1,4 @@
+MaxEmptyLinesToKeep: 2
+IndentWidth: 4
+NamespaceIndentation: All
+PointerAlignment: Left
