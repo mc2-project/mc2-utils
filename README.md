@@ -65,3 +65,15 @@ For a more verbose output, run `ctest -V` instead of `make test`
 After building, the `mc2_utils_{e/h}` libraries can be linked to, and `spdlog` can be added as a dependency.
 
 Headers from `mc2_utils` can be imported directly (e.g. `#include "crypto.h"`) and `spdlog` should be imported as `#include "spdlog/spdlog.h"`.
+
+## Development
+For development, we use pre-commit hooks to ensure consistent code style. If
+you commit code which is formatted incorrectly, the pre-commit hooks will reject
+the commit and re-format the code for you so that a subsequent commit attempt will work.
+
+If you would like to contribute to this repository, please install the pre-commit hooks by running the following commands:
+
+```sh
+pip install pre-commit
+pre-commit install
+```

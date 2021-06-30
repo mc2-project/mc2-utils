@@ -90,7 +90,8 @@ namespace {
     class CompletenessTest : public UtilsTest {};
 
     TEST_F(CompletenessTest, SymEnc) {
-        // Encrypt the message
+        // Encrypt the message along with the additionally-authenticated string
+        // "aad"
         std::vector<uint8_t> ct(crypto.SymEncSize(msg.size()));
         ASSERT_EQ(0, crypto.SymEnc(sym_key, msg.data(),
                                    reinterpret_cast<const uint8_t*>("aad"),
@@ -152,9 +153,11 @@ namespace {
 
     TEST_F(CompletenessTest, Attestation) {
         // Currently the unittests only support building for the host, so we
-        // can't generate evidence. Instead we verify pre-generated evidence
+        // can't generate evidence. Instead we verify pre-generated evidence.
 
-        // Load nonce, public key, enclave signing key, and evidence from file
+        // Load nonce, public key, enclave signing key, and evidence from file.
+        // The evidence was generated using this particular nonce, public key,
+        // and enclave signing key.
         std::vector<uint8_t> nonce;
         std::vector<uint8_t> pub_key;
         std::vector<uint8_t> signing_key;
@@ -179,7 +182,8 @@ namespace {
     class SoundnessTest : public UtilsTest {};
 
     TEST_F(SoundnessTest, SymEnc) {
-        // Encrypt the message
+        // Encrypt the message along with the additionally-authenticated string
+        // "aad"
         std::vector<uint8_t> ct(crypto.SymEncSize(msg.size()));
         ASSERT_EQ(0, crypto.SymEnc(sym_key, msg.data(),
                                    reinterpret_cast<const uint8_t*>("aad"),
@@ -193,7 +197,7 @@ namespace {
         for (int i = 0; i < 100; i++) {
             std::vector<uint8_t> perturbed_ct(ct);
             perturb(perturbed_ct);
-            ASSERT_NE(0, crypto.SymDec(sym_key, perturbed_ct.data(),
+            ASSERT_EQ(0, crypto.SymDec(sym_key, perturbed_ct.data(),
                                        reinterpret_cast<const uint8_t*>("aad"),
                                        pt.data(), perturbed_ct.size(),
                                        strlen("aad")))
@@ -240,6 +244,13 @@ namespace {
             << "Truncated ciphertext decrypted successfully";
 
         // 6) Swap random blocks in the ciphertext
+        //
+        // Each ciphertext is formated as:
+        //      IV || TAG || ENCRYPTED BLOCK || ENCRYPTED BLOCK || ...
+        //
+        // We modify the part of the ciphertext including only the encrypted
+        // blocks (not the IV or tag) by swapping the ordering of these blocks
+        // before attempting decryption.
         for (int i = 0; i < 100; i++) {
             perturbed_ct = std::vector<uint8_t>(ct);
             std::vector<uint8_t> ct_blocks(perturbed_ct.begin() +
@@ -301,7 +312,10 @@ namespace {
                                     perturbed_ct.size(), &_pt_size))
             << "Truncated ciphertext decrypted successfully";
 
-        // 4) Swap random blocks in the ciphertext
+        // 4) Swap random blocks in the ciphertext.
+        //
+        // Each ciphertext is a sequence of encrypted blocks of equal size.
+        // We swap the ordering of these blocks before attempting decryption.
         for (int i = 0; i < 100; i++) {
             std::vector<uint8_t> perturbed_ct(ct);
             swap_blocks(perturbed_ct, RSA_MOD_SIZE);
@@ -348,7 +362,9 @@ namespace {
         // Currently the unittests only support building for the host, so we
         // can't generate evidence. Instead we modify pre-generated evidence
 
-        // Load nonce, public key, enclave signing key, and evidence from file
+        // Load nonce, public key, enclave signing key, and evidence from file.
+        // The evidence was generated using this particular nonce, public key,
+        // and enclave signing key.
         std::vector<uint8_t> nonce;
         std::vector<uint8_t> pub_key;
         std::vector<uint8_t> signing_key;
@@ -380,14 +396,16 @@ namespace {
                          evidence.size(), pub_key.size()))
             << "Evidence verified successfully with invalid nonce";
 
-        // Use an incorrect public key
+        // Use an incorrect public key. The evidence was generate using
+        // `pub_key`, but we instead attempt to verify the evidence with the
+        // randomly-generated `pem_key`.
         ASSERT_NE(0, attestation->AttestEvidence(
                          &sgx_remote_uuid, signing_key.data(), evidence.data(),
                          pem_key, new_nonce, signing_key.size() + 1,
                          evidence.size(), CIPHER_PK_SIZE))
             << "Evidence verified successfully with invalid public key";
 
-        // Use an invalid signing key
+        // Use an invalid enclave signing key
         ASSERT_NE(0, attestation->AttestEvidence(
                          &sgx_remote_uuid, pem_key, evidence.data(),
                          pub_key.data(), new_nonce, CIPHER_PK_SIZE + 1,
