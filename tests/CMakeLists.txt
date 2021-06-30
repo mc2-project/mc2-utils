@@ -9,7 +9,7 @@ include(GoogleTest)
 
 add_executable(tests tests.cpp)
 if (HOST)
-    target_link_libraries(tests mc2_utils_h)
+    target_link_libraries(tests mc2_utils_h openenclave::oehost)
 else()
     message(FATAL_ERROR "Unittests can only be run in Host mode currently" )
 endif()

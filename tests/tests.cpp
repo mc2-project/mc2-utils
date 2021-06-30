@@ -1,8 +1,14 @@
 #include <fstream>
 #include <stdlib.h>
 
-#include "crypto.h"
+#include "openenclave/attestation/sgx/evidence.h"
 #include "gtest/gtest.h"
+
+#include "attestation.h"
+#include "crypto.h"
+
+// SGX Remote Attestation UUID.
+static oe_uuid_t sgx_remote_uuid = {OE_FORMAT_UUID_SGX_ECDSA};
 
 // Change a random byte in the provided buffer to a different random byte
 void perturb(std::vector<uint8_t>& buf) {
@@ -39,13 +45,12 @@ void swap_blocks(std::vector<uint8_t>& buf, size_t block_size) {
     }
 }
 
-// Loads the public keyfile in the tests/ directory into the provided buffer
-void load_pub_key(std::vector<uint8_t>& pem_key) {
-    std::ifstream pem_file("../../tests/public.pub",
-                           std::ios::binary | std::ios::ate);
-    pem_key = std::vector<uint8_t>(pem_file.tellg());
-    pem_file.seekg(0, std::ios::beg);
-    pem_file.read(reinterpret_cast<char*>(pem_key.data()), pem_key.size());
+// Loads a file into the provided buffer
+void load_file(std::string path, std::vector<uint8_t>& buf) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    buf = std::vector<uint8_t>(file.tellg());
+    file.seekg(0, std::ios::beg);
+    file.read(reinterpret_cast<char*>(buf.data()), buf.size());
 }
 
 namespace {
@@ -53,7 +58,7 @@ namespace {
     /*
      * Shared cryptographic state used across tests
      */
-    class CryptoTest : public testing::Test {
+    class UtilsTest : public testing::Test {
       protected:
         void SetUp() override {
             // Generate a random symmetric key
@@ -65,9 +70,13 @@ namespace {
             // Generate a random message
             msg = std::vector<uint8_t>(1024);
             crypto.RandGen(msg.data(), msg.size());
+
+            attestation =
+                std::unique_ptr<Attestation>(new Attestation(&crypto));
         }
 
         Crypto crypto;
+        std::unique_ptr<Attestation> attestation;
         uint8_t sym_key[CIPHER_KEY_SIZE];
         uint8_t pem_key[CIPHER_PK_SIZE];
         std::vector<uint8_t> msg;
@@ -78,7 +87,7 @@ namespace {
     // ##############################
 
     // Dummy class to create a new test suite
-    class CompletenessTest : public CryptoTest {};
+    class CompletenessTest : public UtilsTest {};
 
     TEST_F(CompletenessTest, SymEnc) {
         // Encrypt the message
@@ -128,12 +137,12 @@ namespace {
         // Sign the message
         std::vector<uint8_t> sig(crypto.AsymSignSize());
         ASSERT_EQ(0,
-                  crypto.SignUsingKeyfile("../../tests/private.pem", msg.data(),
-                                          sig.data(), msg.size()));
+                  crypto.SignUsingKeyfile("../../tests/data/private.pem",
+                                          msg.data(), sig.data(), msg.size()));
 
         // Load public verification key from file
         std::vector<uint8_t> pub_key;
-        load_pub_key(pub_key);
+        load_file(std::string("../../tests/data/public.pub"), pub_key);
 
         // Verify the signature
         ASSERT_EQ(0, crypto.Verify(pub_key.data(), msg.data(), sig.data(),
@@ -141,12 +150,33 @@ namespace {
     }
 #endif
 
+    TEST_F(CompletenessTest, Attestation) {
+        // Currently the unittests only support building for the host, so we
+        // can't generate evidence. Instead we verify pre-generated evidence
+
+        // Load nonce, public key, enclave signing key, and evidence from file
+        std::vector<uint8_t> nonce;
+        std::vector<uint8_t> pub_key;
+        std::vector<uint8_t> signing_key;
+        std::vector<uint8_t> evidence;
+        load_file(std::string("../../tests/data/nonce"), nonce);
+        load_file(std::string("../../tests/data/report_key.pub"), pub_key);
+        load_file(std::string("../../tests/data/signing_key.pub"), signing_key);
+        load_file(std::string("../../tests/data/evidence"), evidence);
+
+        // Verify the evidence
+        ASSERT_EQ(0, attestation->AttestEvidence(
+                         &sgx_remote_uuid, signing_key.data(), evidence.data(),
+                         pub_key.data(), nonce.data(), signing_key.size() + 1,
+                         evidence.size(), pub_key.size()));
+    }
+
     // ###########################
     // ##### SOUNDNESS TESTS #####
     // ###########################
 
     // Dummy class to create a new test suite
-    class SoundnessTest : public CryptoTest {};
+    class SoundnessTest : public UtilsTest {};
 
     TEST_F(SoundnessTest, SymEnc) {
         // Encrypt the message
@@ -252,7 +282,7 @@ namespace {
         // 2) Decrypt with the wrong key
         // Load public key from file
         std::vector<uint8_t> new_key;
-        load_pub_key(new_key);
+        load_file(std::string("../../tests/data/public.pub"), new_key);
 
         // Encrypt a ct with the new key
         std::vector<uint8_t> new_ct(crypto.AsymEncSize(msg.size()));
@@ -307,11 +337,62 @@ namespace {
         // 3) Verify with the wrong key
         // Load public key from file
         std::vector<uint8_t> new_key;
-        load_pub_key(new_key);
+        load_file(std::string("../../tests/data/public.pub"), new_key);
 
         ASSERT_NE(0, crypto.Verify(new_key.data(), msg.data(), sig.data(),
                                    msg.size()))
             << "Message verified with the incorrect key";
+    }
+
+    TEST_F(SoundnessTest, Attestation) {
+        // Currently the unittests only support building for the host, so we
+        // can't generate evidence. Instead we modify pre-generated evidence
+
+        // Load nonce, public key, enclave signing key, and evidence from file
+        std::vector<uint8_t> nonce;
+        std::vector<uint8_t> pub_key;
+        std::vector<uint8_t> signing_key;
+        std::vector<uint8_t> evidence;
+        load_file(std::string("../../tests/data/nonce"), nonce);
+        load_file(std::string("../../tests/data/report_key.pub"), pub_key);
+        load_file(std::string("../../tests/data/signing_key.pub"), signing_key);
+        load_file(std::string("../../tests/data/evidence"), evidence);
+
+        // Make random pertubations in the evidence
+        for (int i = 0; i < 100; i++) {
+            std::vector<uint8_t> perturbed_evidence(evidence);
+            perturb(perturbed_evidence);
+            ASSERT_NE(0, attestation->AttestEvidence(
+                             &sgx_remote_uuid, signing_key.data(),
+                             perturbed_evidence.data(), pub_key.data(),
+                             nonce.data(), signing_key.size() + 1,
+                             perturbed_evidence.size(), pub_key.size()))
+                << "Perturbed evidence verified successfully";
+        }
+
+        // Use a different nonce
+        uint8_t new_nonce[CIPHER_IV_SIZE];
+        crypto.RandGen(new_nonce, CIPHER_IV_SIZE);
+
+        ASSERT_NE(0, attestation->AttestEvidence(
+                         &sgx_remote_uuid, signing_key.data(), evidence.data(),
+                         pub_key.data(), new_nonce, signing_key.size() + 1,
+                         evidence.size(), pub_key.size()))
+            << "Evidence verified successfully with invalid nonce";
+
+        // Use an incorrect public key
+        ASSERT_NE(0, attestation->AttestEvidence(
+                         &sgx_remote_uuid, signing_key.data(), evidence.data(),
+                         pem_key, new_nonce, signing_key.size() + 1,
+                         evidence.size(), CIPHER_PK_SIZE))
+            << "Evidence verified successfully with invalid public key";
+
+        // Use an invalid signing key
+        ASSERT_NE(0, attestation->AttestEvidence(
+                         &sgx_remote_uuid, pem_key, evidence.data(),
+                         pub_key.data(), new_nonce, CIPHER_PK_SIZE + 1,
+                         evidence.size(), pub_key.size()))
+            << "Evidence verified successfully with invalid signing key";
     }
 
 } // namespace
