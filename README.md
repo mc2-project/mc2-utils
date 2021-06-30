@@ -47,6 +47,19 @@ set(HOST ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(mc2_utils_h)
 ```
 
+### Unittests
+
+`mc2-utils` additionally includes a set of unittests.  To build and run these unittests, use the following commands:
+```bash
+mkdir build
+cd build
+cmake .. -DHOST="ON" -DUNITTEST="ON"
+make -j 8
+make test
+```
+For a more verbose output, run `ctest -V` instead of `make test`
+
+
 ## Usage
 
 After building, the `mc2_utils_{e/h}` libraries can be linked to, and `spdlog` can be added as a dependency.
