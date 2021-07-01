@@ -1,8 +1,8 @@
-#include <fstream>
 #include <stdlib.h>
+#include <fstream>
 
-#include "openenclave/attestation/sgx/evidence.h"
 #include "gtest/gtest.h"
+#include "openenclave/attestation/sgx/evidence.h"
 
 #include "attestation.h"
 #include "crypto.h"
@@ -59,7 +59,7 @@ namespace {
      * Shared cryptographic state used across tests
      */
     class UtilsTest : public testing::Test {
-      protected:
+       protected:
         void SetUp() override {
             // Generate a random symmetric key
             crypto.RandGen(sym_key, CIPHER_KEY_SIZE);
@@ -197,10 +197,10 @@ namespace {
         for (int i = 0; i < 100; i++) {
             std::vector<uint8_t> perturbed_ct(ct);
             perturb(perturbed_ct);
-            ASSERT_NE(0, crypto.SymDec(sym_key, perturbed_ct.data(),
-                                       reinterpret_cast<const uint8_t*>("aad"),
-                                       pt.data(), perturbed_ct.size(),
-                                       strlen("aad")))
+            ASSERT_NE(
+                0, crypto.SymDec(sym_key, perturbed_ct.data(),
+                                 reinterpret_cast<const uint8_t*>("aad"),
+                                 pt.data(), perturbed_ct.size(), strlen("aad")))
                 << "Perturbed ciphertext decrypted successfully";
         }
 
@@ -212,10 +212,10 @@ namespace {
         for (int i = 0; i < CIPHER_IV_SIZE; i++) {
             perturbed_ct[i] = new_iv[i];
         }
-        ASSERT_NE(0,
-                  crypto.SymDec(sym_key, perturbed_ct.data(),
-                                reinterpret_cast<const uint8_t*>("aad"),
-                                pt.data(), perturbed_ct.size(), strlen("aad")))
+        ASSERT_NE(
+            0, crypto.SymDec(sym_key, perturbed_ct.data(),
+                             reinterpret_cast<const uint8_t*>("aad"), pt.data(),
+                             perturbed_ct.size(), strlen("aad")))
             << "Ciphertext with invalid IV decrypted successfully";
 
         // 3) Use incorrect AAD
@@ -237,10 +237,10 @@ namespace {
         perturbed_ct = std::vector<uint8_t>(ct);
         perturbed_ct.resize(perturbed_ct.size() - CIPHER_KEY_SIZE);
 
-        ASSERT_NE(0,
-                  crypto.SymDec(sym_key, perturbed_ct.data(),
-                                reinterpret_cast<const uint8_t*>("aad"),
-                                pt.data(), perturbed_ct.size(), strlen("aad")))
+        ASSERT_NE(
+            0, crypto.SymDec(sym_key, perturbed_ct.data(),
+                             reinterpret_cast<const uint8_t*>("aad"), pt.data(),
+                             perturbed_ct.size(), strlen("aad")))
             << "Truncated ciphertext decrypted successfully";
 
         // 6) Swap random blocks in the ciphertext
@@ -253,19 +253,19 @@ namespace {
         // before attempting decryption.
         for (int i = 0; i < 100; i++) {
             perturbed_ct = std::vector<uint8_t>(ct);
-            std::vector<uint8_t> ct_blocks(perturbed_ct.begin() +
-                                               CIPHER_IV_SIZE + CIPHER_TAG_SIZE,
-                                           perturbed_ct.end());
+            std::vector<uint8_t> ct_blocks(
+                perturbed_ct.begin() + CIPHER_IV_SIZE + CIPHER_TAG_SIZE,
+                perturbed_ct.end());
             swap_blocks(ct_blocks, CIPHER_KEY_SIZE);
             for (int j = CIPHER_IV_SIZE + CIPHER_TAG_SIZE;
                  j < perturbed_ct.size(); j++) {
                 perturbed_ct[j] = ct_blocks[j];
             }
 
-            ASSERT_NE(0, crypto.SymDec(sym_key, perturbed_ct.data(),
-                                       reinterpret_cast<const uint8_t*>("aad"),
-                                       pt.data(), perturbed_ct.size(),
-                                       strlen("aad")))
+            ASSERT_NE(
+                0, crypto.SymDec(sym_key, perturbed_ct.data(),
+                                 reinterpret_cast<const uint8_t*>("aad"),
+                                 pt.data(), perturbed_ct.size(), strlen("aad")))
                 << "Ciphertext decrypted successfully with swapped blocks";
         }
     }
@@ -291,7 +291,8 @@ namespace {
         }
 
         // 2) Decrypt with the wrong key
-        // Load public key from file
+        // Load a public key from file - this is a public key belonging to a
+        // different keypair than the one that `crypto` interally generated.
         std::vector<uint8_t> new_key;
         load_file(std::string("../../tests/data/public.pub"), new_key);
 
@@ -300,6 +301,9 @@ namespace {
         ASSERT_EQ(0, crypto.AsymEnc(new_key.data(), msg.data(), new_ct.data(),
                                     msg.size()));
 
+        // Attempt to decrypt the ciphertext using the incorrect private key.
+        // `AsymDec` uses an internally generated private key that is different
+        // than the corresponding private key of `new_key`.
         ASSERT_NE(0, crypto.AsymDec(new_ct.data(), pt.data(), new_ct.size(),
                                     &_pt_size))
             << "Ciphertext decrypted successfully with incorrect key";
@@ -413,4 +417,4 @@ namespace {
             << "Evidence verified successfully with invalid signing key";
     }
 
-} // namespace
+}  // namespace
