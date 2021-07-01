@@ -1,3 +1,5 @@
+BasedOnStyle: Chromium
+Standard: Cpp11
 MaxEmptyLinesToKeep: 2
 IndentWidth: 4
 NamespaceIndentation: All
