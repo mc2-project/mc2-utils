@@ -1,12 +1,12 @@
 #include <math.h>
+#include <sstream>
 
 #include "spdlog/spdlog.h"
 
 #include "crypto.h"
 #include "error.h"
 
-Crypto::Crypto(): m_initialized(false)
-{
+Crypto::Crypto() : m_initialized(false) {
     int res = -1;
 
 #ifdef HOST
@@ -21,12 +21,9 @@ Crypto::Crypto(): m_initialized(false)
 
     // Initialize entropy.
     std::string seed = "MC^2 entropy seed";
-    res = mbedtls_ctr_drbg_seed(
-        &m_ctr_drbg_context,
-        mbedtls_entropy_func,
-        &m_entropy_context,
-        (unsigned char *)seed.c_str(),
-        seed.size());
+    res = mbedtls_ctr_drbg_seed(&m_ctr_drbg_context, mbedtls_entropy_func,
+                                &m_entropy_context,
+                                (unsigned char*)seed.c_str(), seed.size());
     if (res != 0) {
         spdlog::error("Failed to initialize entropy.");
         spdlog::error("Returned error: {}", to_string(res));
@@ -34,27 +31,21 @@ Crypto::Crypto(): m_initialized(false)
     }
 
     // Setup RSA context.
-    res = mbedtls_pk_setup(
-        &m_pk_context,
-        mbedtls_pk_info_from_type(MBEDTLS_PK_RSA));
+    res = mbedtls_pk_setup(&m_pk_context,
+                           mbedtls_pk_info_from_type(MBEDTLS_PK_RSA));
     if (res != 0) {
         spdlog::error("Failed to set up RSA context.");
         spdlog::error("Returned error: {}", to_string(res));
         return;
     }
-    mbedtls_rsa_init(
-        mbedtls_pk_rsa(m_pk_context),
-        MBEDTLS_RSA_PKCS_V21,
-        MBEDTLS_MD_SHA256);
+    mbedtls_rsa_init(mbedtls_pk_rsa(m_pk_context), MBEDTLS_RSA_PKCS_V21,
+                     MBEDTLS_MD_SHA256);
 
     // Generate an ephemeral 2048-bit RSA key pair with
     // exponent 65537.
-    res = mbedtls_rsa_gen_key(
-        mbedtls_pk_rsa(m_pk_context),
-        mbedtls_ctr_drbg_random,
-        &m_ctr_drbg_context,
-        RSA_MOD_SIZE * 8,
-        RSA_EXPONENT);
+    res = mbedtls_rsa_gen_key(mbedtls_pk_rsa(m_pk_context),
+                              mbedtls_ctr_drbg_random, &m_ctr_drbg_context,
+                              RSA_MOD_SIZE * 8, RSA_EXPONENT);
     if (res != 0) {
         spdlog::error("Failed to generate RSA key pair");
         spdlog::error("Returned error: {}", to_string(res));
@@ -65,9 +56,7 @@ Crypto::Crypto(): m_initialized(false)
     spdlog::info("Successfully initialized cryptography module.");
 }
 
-
-Crypto::~Crypto()
-{
+Crypto::~Crypto() {
     // Free mbedtls contexts
     mbedtls_pk_free(&m_pk_context);
     mbedtls_entropy_free(&m_entropy_context);
@@ -75,31 +64,24 @@ Crypto::~Crypto()
     spdlog::info("Successfully freed relevant cryptography contexts.");
 }
 
-
 size_t Crypto::AsymEncSize(size_t data_size) {
-    return ceil(double(data_size) / double(RSA_MAX_MESSAGE_SIZE)) * RSA_MOD_SIZE;
+    return ceil(double(data_size) / double(RSA_MAX_MESSAGE_SIZE)) *
+           RSA_MOD_SIZE;
 }
-
 
 size_t Crypto::AsymDecSize(size_t enc_data_size) {
     return ceil(enc_data_size / RSA_MOD_SIZE) * RSA_MAX_MESSAGE_SIZE;
 }
 
-
-size_t Crypto::AsymSignSize() {
-    return RSA_MOD_SIZE;
-}
-
+size_t Crypto::AsymSignSize() { return RSA_MOD_SIZE; }
 
 size_t Crypto::SymEncSize(size_t data_size) {
     return data_size + CIPHER_IV_SIZE + CIPHER_TAG_SIZE;
 }
 
-
 size_t Crypto::SymDecSize(size_t enc_data_size) {
     return enc_data_size - CIPHER_IV_SIZE - CIPHER_TAG_SIZE;
 }
-
 
 /*
  * Helper function to check that an externally-generated key has compatible
@@ -108,8 +90,8 @@ size_t Crypto::SymDecSize(size_t enc_data_size) {
 int check_rsa_key(mbedtls_pk_context* pk) {
     int res = -1;
 
-    // This function returns 1 if the context can do operations on the given type,
-    // 0 if the context cannot
+    // This function returns 1 if the context can do operations on the given
+    // type, 0 if the context cannot
     res = mbedtls_pk_can_do(pk, MBEDTLS_PK_RSA);
     if (!res) {
         spdlog::error("Given private key is not an RSA key.");
@@ -124,10 +106,9 @@ int check_rsa_key(mbedtls_pk_context* pk) {
     return 0;
 }
 
-
 int Crypto::WritePublicKey(uint8_t (&buf)[CIPHER_PK_SIZE]) {
     int res = -1;
-    
+
     if (!m_initialized)
         return res;
 
@@ -141,10 +122,9 @@ int Crypto::WritePublicKey(uint8_t (&buf)[CIPHER_PK_SIZE]) {
     return res;
 }
 
-
 int Crypto::RandGen(uint8_t* buf, size_t buf_len) {
     int res = -1;
-    
+
     if (!m_initialized)
         return res;
 
@@ -156,18 +136,13 @@ int Crypto::RandGen(uint8_t* buf, size_t buf_len) {
     return res;
 }
 
-
-int Crypto::AsymEnc(
-    const uint8_t* pem_public_key,
-    const uint8_t* data,
-    uint8_t*       enc_data,
-    size_t         data_size
-) {
+int Crypto::AsymEnc(const uint8_t* pem_public_key, const uint8_t* data,
+                    uint8_t* enc_data, size_t data_size) {
     int res = -1;
     mbedtls_rsa_context* rsa_context;
     mbedtls_pk_context key;
     // Include the NULL terminator since this is passed to C
-    size_t key_size = strlen((const char*)pem_public_key) + 1;    
+    size_t key_size = strlen((const char*)pem_public_key) + 1;
 
     if (!m_initialized)
         return res;
@@ -176,7 +151,8 @@ int Crypto::AsymEnc(
     mbedtls_pk_init(&key);
     res = mbedtls_pk_parse_public_key(&key, pem_public_key, key_size);
     if (res != 0) {
-        spdlog::error("Failed to read public key during public key encryption.");
+        spdlog::error(
+            "Failed to read public key during public key encryption.");
         spdlog::error("Returned error: {}", to_string(res));
         return res;
     }
@@ -209,21 +185,17 @@ int Crypto::AsymEnc(
             remaining_data_size -= RSA_MAX_MESSAGE_SIZE;
         }
 
-        // The sequence number for the current ciphertext
-        std::vector<uint8_t> seq(sizeof(i));
-        memcpy(seq.data(), &i, sizeof(i));
+        // The AAD for each ciphertext is "{num_cts}||{seq}"
+        std::ostringstream aad_stream;
+        aad_stream << num_cts << "||" << i;
+        std::string aad_str = aad_stream.str();
+        std::vector<uint8_t> aad(aad_str.begin(), aad_str.end());
 
         // Encrypt the data.
         res = mbedtls_rsa_rsaes_oaep_encrypt(
-            rsa_context,
-            mbedtls_ctr_drbg_random,
-            &m_ctr_drbg_context,
-            MBEDTLS_RSA_PUBLIC,
-            seq.data(),
-            seq.size(),
-            data_to_encrypt_size,
-            remaining_data,
-            enc_data + data_encrypted_size);
+            rsa_context, mbedtls_ctr_drbg_random, &m_ctr_drbg_context,
+            MBEDTLS_RSA_PUBLIC, aad.data(), aad.size(), data_to_encrypt_size,
+            remaining_data, enc_data + data_encrypted_size);
 
         if (res != 0) {
             spdlog::error("Failed to perform public key encryption.");
@@ -237,19 +209,14 @@ int Crypto::AsymEnc(
         // Track how much data we've encrypted thus far
         data_encrypted_size += RSA_MOD_SIZE;
     }
-    
+
     // Free the allocated context
     mbedtls_pk_free(&key);
     return res;
 }
 
-
-int Crypto::AsymDec(
-    const uint8_t* enc_data,
-    uint8_t*       data,
-    size_t         enc_data_size,
-    size_t*        data_size
-) {
+int Crypto::AsymDec(const uint8_t* enc_data, uint8_t* data,
+                    size_t enc_data_size, size_t* data_size) {
     int res = -1;
     mbedtls_rsa_context* rsa_context = mbedtls_pk_rsa(m_pk_context);
 
@@ -265,29 +232,26 @@ int Crypto::AsymDec(
     *data_size = 0;
 
     // Decrypt each ciphertext in `enc_data`
-    for (size_t i = 0; i < enc_data_size / RSA_MOD_SIZE; i++) {
+    size_t num_cts = enc_data_size / RSA_MOD_SIZE;
+    for (size_t i = 0; i < num_cts; i++) {
         // The size of the current plaintext
         size_t pt_size = 0;
 
-        // The sequence number for the current ciphertext
-        std::vector<uint8_t> seq(sizeof(i));
-        memcpy(seq.data(), &i, sizeof(i));
+        // The AAD for each ciphertext is "{num_cts}||{seq}"
+        std::ostringstream aad_stream;
+        aad_stream << num_cts << "||" << i;
+        std::string aad_str = aad_stream.str();
+        std::vector<uint8_t> aad(aad_str.begin(), aad_str.end());
 
         // Decrypt the ciphertext.
         res = mbedtls_rsa_rsaes_oaep_decrypt(
-            rsa_context,
-            mbedtls_ctr_drbg_random,
-            &m_ctr_drbg_context,
-            MBEDTLS_RSA_PRIVATE,
-            seq.data(),
-            seq.size(),
-            &pt_size,
-            next_ct,
-            next_pt,
-            RSA_MOD_SIZE);
+            rsa_context, mbedtls_ctr_drbg_random, &m_ctr_drbg_context,
+            MBEDTLS_RSA_PRIVATE, aad.data(), aad.size(), &pt_size, next_ct,
+            next_pt, RSA_MOD_SIZE);
         if (res != 0) {
             spdlog::error("Failed to perform public key decryption.");
             spdlog::error("Returned error: {}", to_string(res));
+            return res;
         }
 
         next_ct += RSA_MOD_SIZE;
@@ -297,21 +261,15 @@ int Crypto::AsymDec(
     return res;
 }
 
-
-int Crypto::SymEnc(
-    const uint8_t* sym_key,
-    const uint8_t* data,
-    const uint8_t* aad,
-    uint8_t*       enc_data,
-    size_t         data_size,
-    size_t         aad_size
-) {
+int Crypto::SymEnc(const uint8_t* sym_key, const uint8_t* data,
+                   const uint8_t* aad, uint8_t* enc_data, size_t data_size,
+                   size_t aad_size) {
     int res = -1;
 
     // Initialize GCM context
     mbedtls_gcm_context ctx;
     mbedtls_gcm_init(&ctx);
-    
+
     // Set the pointers so that the ciphertext is formatted as:
     //     IV || TAG || ENCRYPTED DATA
     uint8_t* iv = enc_data;
@@ -319,21 +277,19 @@ int Crypto::SymEnc(
     uint8_t* output = tag + CIPHER_TAG_SIZE;
 
     // Add `sym_key` and AES cipher to the current GCM context
-    res = mbedtls_gcm_setkey(
-        &ctx,
-        MBEDTLS_CIPHER_ID_AES,
-        sym_key,
-        CIPHER_KEY_SIZE * 8); // Key size is given in bits
-    if( res != 0 ) {
+    res = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, sym_key,
+                             CIPHER_KEY_SIZE * 8); // Key size is given in bits
+    if (res != 0) {
         mbedtls_gcm_free(&ctx);
-        spdlog::error("Failed to set symmetric key during symmetric key encryption.");
+        spdlog::error(
+            "Failed to set symmetric key during symmetric key encryption.");
         spdlog::error("Returned error: {}", to_string(res));
         return res;
     }
 
     // Sample randomness for the IV
     res = RandGen(iv, CIPHER_IV_SIZE);
-    if( res != 0 ) {
+    if (res != 0) {
         mbedtls_gcm_free(&ctx);
         spdlog::error("Failed to generate IV during symmetric key encryption.");
         spdlog::error("Returned error: {}", to_string(res));
@@ -341,39 +297,24 @@ int Crypto::SymEnc(
     }
 
     // Encrypt data
-    res = mbedtls_gcm_crypt_and_tag( 
-        &ctx,
-        MBEDTLS_GCM_ENCRYPT,
-        data_size,
-        iv,
-        CIPHER_IV_SIZE,
-        aad,
-        aad_size,
-        data,
-        output,
-        CIPHER_TAG_SIZE,
-        tag);
-    if( res != 0 ) {
+    res = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT, data_size, iv,
+                                    CIPHER_IV_SIZE, aad, aad_size, data, output,
+                                    CIPHER_TAG_SIZE, tag);
+    if (res != 0) {
         mbedtls_gcm_free(&ctx);
         spdlog::error("Failed to perform symmetric key encryption.");
         spdlog::error("Returned error: {}", to_string(res));
     }
-    
+
     // Free the GCM context
     mbedtls_gcm_free(&ctx);
-    
+
     return res;
 }
 
-
-int Crypto::SymDec(
-    const uint8_t* sym_key,
-    const uint8_t* enc_data,
-    const uint8_t* aad,
-    uint8_t*       data,
-    size_t         enc_data_size,
-    size_t         aad_size
-) {
+int Crypto::SymDec(const uint8_t* sym_key, const uint8_t* enc_data,
+                   const uint8_t* aad, uint8_t* data, size_t enc_data_size,
+                   size_t aad_size) {
     int res = -1;
 
     // Initialize GCM context
@@ -381,18 +322,16 @@ int Crypto::SymDec(
     mbedtls_gcm_init(&ctx);
 
     // Add `sym_key` and AES cipher to the current GCM context
-    res = mbedtls_gcm_setkey(
-        &ctx,
-        MBEDTLS_CIPHER_ID_AES,
-        sym_key,
-        CIPHER_KEY_SIZE * 8); // Key size is given in bits
-    if( res != 0 ) {
+    res = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, sym_key,
+                             CIPHER_KEY_SIZE * 8); // Key size is given in bits
+    if (res != 0) {
         mbedtls_gcm_free(&ctx);
-        spdlog::error("Failed to set symmetric key during symmetric key decryption.");
+        spdlog::error(
+            "Failed to set symmetric key during symmetric key decryption.");
         spdlog::error("Returned error: {}", to_string(res));
         return res;
     }
-    
+
     // Set the appropiate pointers since the ciphertext is formatted as:
     //     IV || TAG || ENCRYPTED DATA
     const uint8_t* iv = enc_data;
@@ -401,34 +340,21 @@ int Crypto::SymDec(
 
     // Decrypt the data
     res = mbedtls_gcm_auth_decrypt(
-        &ctx,
-        enc_data_size - CIPHER_IV_SIZE - CIPHER_TAG_SIZE,
-        iv,
-        CIPHER_IV_SIZE,
-        aad,
-        aad_size,
-        tag,
-        CIPHER_TAG_SIZE,
-        ciphertext,
-        data);
+        &ctx, enc_data_size - CIPHER_IV_SIZE - CIPHER_TAG_SIZE, iv,
+        CIPHER_IV_SIZE, aad, aad_size, tag, CIPHER_TAG_SIZE, ciphertext, data);
     if (res != 0) {
-        mbedtls_gcm_free(&ctx);
         spdlog::error("Failed to perform symmetric key decryption.");
         spdlog::error("Returned error: {}", to_string(res));
     }
-    
+
     // Free the GCM context
     mbedtls_gcm_free(&ctx);
 
     return res;
 }
 
-
-int Crypto::Hash(
-    const uint8_t* data,
-    uint8_t        (&output)[SHA_DIGEST_SIZE],
-    size_t         data_size
-) {
+int Crypto::Hash(const uint8_t* data, uint8_t (&output)[SHA_DIGEST_SIZE],
+                 size_t data_size) {
     int res = -1;
 
     // Initialize SHA256 context
@@ -436,15 +362,16 @@ int Crypto::Hash(
     mbedtls_sha256_init(&ctx);
 
 // Macro to simplify error handling
-#define safe_sha(call) {                                 \
-  res = (call);                                          \
-  if (res) {                                             \
-    mbedtls_sha256_free(&ctx);                           \
-    spdlog::error("Failed to hash");                     \
-    spdlog::error("Returned error: {}", to_string(res)); \
-    return res;                                          \
-  }                                                      \
-}
+#define safe_sha(call)                                                         \
+    {                                                                          \
+        res = (call);                                                          \
+        if (res) {                                                             \
+            mbedtls_sha256_free(&ctx);                                         \
+            spdlog::error("Failed to hash");                                   \
+            spdlog::error("Returned error: {}", to_string(res));               \
+            return res;                                                        \
+        }                                                                      \
+    }
     // Compute the hash
     safe_sha(mbedtls_sha256_starts_ret(&ctx, 0));
     safe_sha(mbedtls_sha256_update_ret(&ctx, data, data_size));
@@ -456,13 +383,8 @@ int Crypto::Hash(
     return res;
 }
 
-
-int Crypto::sign_helper(
-    mbedtls_pk_context* pk,
-    const uint8_t*      data,
-    uint8_t*            sig,
-    size_t              data_size
-) {
+int Crypto::sign_helper(mbedtls_pk_context* pk, const uint8_t* data,
+                        uint8_t* sig, size_t data_size) {
     int res = -1;
     uint8_t hash[SHA_DIGEST_SIZE];
 
@@ -471,24 +393,18 @@ int Crypto::sign_helper(
 
     // Hash the message
     res = Hash(data, hash, data_size);
-    if(res != 0) {
+    if (res != 0) {
         spdlog::error("Failed to hash message when signing data");
         spdlog::error("Returned error: {}", to_string(res));
         return res;
     }
 
     // Generate the signature
-    res = mbedtls_rsa_rsassa_pss_sign(
-        rsa_ctx,
-        mbedtls_ctr_drbg_random,
-        &m_ctr_drbg_context,
-        MBEDTLS_RSA_PRIVATE,
-        MBEDTLS_MD_SHA256,
-        0,
-        hash,
-        sig);
+    res = mbedtls_rsa_rsassa_pss_sign(rsa_ctx, mbedtls_ctr_drbg_random,
+                                      &m_ctr_drbg_context, MBEDTLS_RSA_PRIVATE,
+                                      MBEDTLS_MD_SHA256, 0, hash, sig);
 
-    if(res != 0) {
+    if (res != 0) {
         spdlog::error("Failed to generate signature");
         spdlog::error("Returned error: {}", to_string(res));
         return res;
@@ -496,12 +412,7 @@ int Crypto::sign_helper(
     return res;
 }
 
-
-int Crypto::Sign(
-    const uint8_t* data,
-    uint8_t*       sig,
-    size_t         data_size
-) {
+int Crypto::Sign(const uint8_t* data, uint8_t* sig, size_t data_size) {
     int res = -1;
     if (!m_initialized)
         return res;
@@ -509,23 +420,18 @@ int Crypto::Sign(
     return sign_helper(&m_pk_context, data, sig, data_size);
 }
 
-
 #ifdef HOST
-int Crypto::SignUsingKeyfile(
-    char*          keyfile,
-    const uint8_t* data,
-    uint8_t*       sig,
-    size_t         data_size
-) {
+int Crypto::SignUsingKeyfile(const char* keyfile, const uint8_t* data,
+                             uint8_t* sig, size_t data_size) {
     int res = -1;
     if (!m_initialized)
         return res;
 
     // Get the key stored in `keyfile`
     mbedtls_pk_context pk;
-    mbedtls_pk_init( &pk );
-    res = mbedtls_pk_parse_keyfile( &pk, keyfile, "");
-    if(res != 0) {
+    mbedtls_pk_init(&pk);
+    res = mbedtls_pk_parse_keyfile(&pk, keyfile, "");
+    if (res != 0) {
         spdlog::error("Failed to read private keyfile");
         spdlog::error("Returned error: {}", to_string(res));
         return res;
@@ -547,13 +453,8 @@ int Crypto::SignUsingKeyfile(
 }
 #endif
 
-
-int Crypto::Verify(
-    const uint8_t* pem_public_key,
-    const uint8_t* data,
-    const uint8_t* sig,
-    size_t         data_size
-) {
+int Crypto::Verify(const uint8_t* pem_public_key, const uint8_t* data,
+                   const uint8_t* sig, size_t data_size) {
     int res = -1;
     uint8_t hash[SHA_DIGEST_SIZE];
     mbedtls_rsa_context* rsa_context;
@@ -568,7 +469,8 @@ int Crypto::Verify(
     mbedtls_pk_init(&key);
     res = mbedtls_pk_parse_public_key(&key, pem_public_key, key_size);
     if (res != 0) {
-        spdlog::error("Failed to read public key during public key encryption.");
+        spdlog::error(
+            "Failed to read public key during public key encryption.");
         spdlog::error("Returned error: {}", to_string(res));
         return res;
     }
@@ -587,22 +489,16 @@ int Crypto::Verify(
 
     // Hash the message
     res = Hash(data, hash, data_size);
-    if(res != 0) {
+    if (res != 0) {
         spdlog::error("Failed to hash message during signature verification.");
         spdlog::error("Returned error: {}", to_string(res));
         return res;
     }
 
     // Verify the provided signature
-    res = mbedtls_rsa_pkcs1_verify(
-        rsa_context,
-        mbedtls_ctr_drbg_random,
-        &m_ctr_drbg_context,
-        MBEDTLS_RSA_PUBLIC,
-        MBEDTLS_MD_SHA256,
-        0,
-        hash,
-        sig);
+    res = mbedtls_rsa_pkcs1_verify(rsa_context, mbedtls_ctr_drbg_random,
+                                   &m_ctr_drbg_context, MBEDTLS_RSA_PUBLIC,
+                                   MBEDTLS_MD_SHA256, 0, hash, sig);
     if (res != 0) {
         spdlog::error("Failed to verify signature");
         spdlog::error("Returned error: {}", to_string(res));

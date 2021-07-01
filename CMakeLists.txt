@@ -78,3 +78,10 @@ else()
 
     add_dependencies(mc2_utils_e spdlog)
 endif()
+
+# Build unittests. These can be run with `make test`.
+option(UNITTEST "Build unittests" OFF)
+if (UNITTEST)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
