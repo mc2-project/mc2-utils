@@ -17,7 +17,12 @@ FetchContent_MakeAvailable(spdlog)
 add_compile_definitions(SPDLOG_NO_THREAD_ID FMT_USE_INT128=0)
 include_directories(${spdlog_SOURCE_DIR}/include)
 
-find_package(OpenEnclave CONFIG REQUIRED)
+set(OE_MIN_VERSION 0.17.1)
+find_package(OpenEnclave ${OE_MIN_VERSION} CONFIG REQUIRED)
+
+set(OE_CRYPTO_LIB
+    mbedtls
+    CACHE STRING "Crypto library used by enclaves.")
 
 set(OPAQUE_UTILS_SOURCES
     src/crypto.cpp
@@ -62,12 +67,12 @@ else()
       target_link_libraries(
         mc2_utils_e
         PRIVATE
-        openenclave::oeenclave-lvi-cfg openenclave::oelibcxx-lvi-cfg openenclave::oecore)
+        openenclave::oeenclave-lvi-cfg openenclave::oecrypto${OE_CRYPTO_LIB}-lvi-cfg openenclave::oelibcxx-lvi-cfg openenclave::oecore)
     else()
       target_link_libraries(
         mc2_utils_e
         PRIVATE
-        openenclave::oeenclave openenclave::oelibcxx openenclave::oecore)
+        openenclave::oeenclave openenclave::oecrypto${OE_CRYPTO_LIB} openenclave::oelibcxx openenclave::oecore)
     endif()
 
     set_target_properties(mc2_utils_e PROPERTIES
