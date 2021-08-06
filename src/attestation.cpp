@@ -94,12 +94,14 @@ int Attestation::GenerateEvidence(const oe_uuid_t* format_id,
     }
 
     // Generate evidence
-    oe_res = oe_get_evidence(format_id, 0, claims_buf, claims_buf_size,
-                             format_settings, format_settings_size, evidence,
-                             evidence_size, nullptr, 0);
+    // Reference for this function here:
+    // https://github.com/openenclave/openenclave/blob/cd72fd7069488ba6f453c8f5f47bd9fd9a6e6c0d/include/openenclave/attestation/attester.h#L75
+    oe_res = oe_get_evidence(format_id, 0, claims_buf, claims_buf_size, nullptr,
+                             0, evidence, evidence_size, nullptr, 0);
+
     if (oe_res != OE_OK) {
         spdlog::error("Failed to generate attestation evidence.");
-        spdlog::error("Returned error: {}", to_string(res));
+        spdlog::error("Returned error: {}", to_string(oe_res));
         return -1;
     }
     return res;
