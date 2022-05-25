@@ -437,7 +437,7 @@ int Crypto::SignUsingKeyfile(const char* keyfile, const uint8_t* data,
         return res;
     }
 
-    // Check the paramters of the key
+    // Check the parameters of the key
     res = check_rsa_key(&pk);
     if (res != 0) {
         spdlog::error("Signing failed - invalid private key");
